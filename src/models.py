@@ -1,50 +1,121 @@
-# src/models.py
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+"""CNN model architecture."""
 
-class SimpleCNN(nn.Module):
+from flwr.common import ndarrays_to_parameters
+from keras.optimizers import SGD
+from keras.regularizers import l2
+from tensorflow import keras
+from tensorflow.nn import local_response_normalization  # pylint: disable=import-error
+
+
+def cnn(input_shape, num_classes, learning_rate):
+    """CNN Model from (McMahan et. al., 2017).
+
+    Communication-efficient learning of deep networks from decentralized data
     """
-    Simple CNN with dynamic computation of the flattened feature size.
-    Use: SimpleCNN(num_classes=10, in_channels=3, input_size=(32,32))
+    input_shape = tuple(input_shape)
+
+    weight_decay = 0.004
+    model = keras.Sequential(
+        [
+            keras.layers.Conv2D(
+                64,
+                (5, 5),
+                padding="same",
+                activation="relu",
+                input_shape=input_shape,
+            ),
+            keras.layers.MaxPooling2D((3, 3), strides=(2, 2)),
+            keras.layers.BatchNormalization(),
+            keras.layers.Conv2D(
+                64,
+                (5, 5),
+                padding="same",
+                activation="relu",
+            ),
+            keras.layers.BatchNormalization(),
+            keras.layers.MaxPooling2D((3, 3), strides=(2, 2)),
+            keras.layers.Flatten(),
+            keras.layers.Dense(
+                384, activation="relu", kernel_regularizer=l2(weight_decay)
+            ),
+            keras.layers.Dense(
+                192, activation="relu", kernel_regularizer=l2(weight_decay)
+            ),
+            keras.layers.Dense(num_classes, activation="softmax"),
+        ]
+    )
+    optimizer = SGD(learning_rate=learning_rate)
+    model.compile(
+        loss="categorical_crossentropy", optimizer=optimizer, metrics=["accuracy"]
+    )
+
+    return model
+
+
+def tf_example(input_shape, num_classes, learning_rate):
+    """CNN Model from TensorFlow v1.x example.
+
+    This is the model referenced on the FedAvg paper.
+
+    Reference:
+    https://web.archive.org/web/20170807002954/https://github.com/tensorflow/models/blob/master/tutorials/image/cifar10/cifar10.py
     """
-    def __init__(self, num_classes=10, in_channels=3, input_size=(32, 32)):
-        super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, 64, 5, padding=2)
-        self.pool1 = nn.MaxPool2d(3, stride=2)
-        self.conv2 = nn.Conv2d(64, 64, 5, padding=2)
-        self.pool2 = nn.MaxPool2d(3, stride=2)
-        self.conv3 = nn.Conv2d(64, 128, 5, padding=2)
-        self.pool3 = nn.MaxPool2d(3, stride=2)
+    input_shape = tuple(input_shape)
 
-        self._feature_dim = self._get_feature_dim(input_size, in_channels)
+    weight_decay = 0.004
+    model = keras.Sequential(
+        [
+            keras.layers.Conv2D(
+                64,
+                (5, 5),
+                padding="same",
+                activation="relu",
+                input_shape=input_shape,
+            ),
+            keras.layers.MaxPooling2D((3, 3), strides=(2, 2), padding="same"),
+            keras.layers.Lambda(
+                local_response_normalization,
+                arguments={
+                    "depth_radius": 4,
+                    "bias": 1.0,
+                    "alpha": 0.001 / 9.0,
+                    "beta": 0.75,
+                },
+            ),
+            keras.layers.Conv2D(
+                64,
+                (5, 5),
+                padding="same",
+                activation="relu",
+            ),
+            keras.layers.Lambda(
+                local_response_normalization,
+                arguments={
+                    "depth_radius": 4,
+                    "bias": 1.0,
+                    "alpha": 0.001 / 9.0,
+                    "beta": 0.75,
+                },
+            ),
+            keras.layers.MaxPooling2D((3, 3), strides=(2, 2), padding="same"),
+            keras.layers.Flatten(),
+            keras.layers.Dense(
+                384, activation="relu", kernel_regularizer=l2(weight_decay)
+            ),
+            keras.layers.Dense(
+                192, activation="relu", kernel_regularizer=l2(weight_decay)
+            ),
+            keras.layers.Dense(num_classes, activation="softmax"),
+        ]
+    )
+    optimizer = SGD(learning_rate=learning_rate)
+    model.compile(
+        loss="categorical_crossentropy", optimizer=optimizer, metrics=["accuracy"]
+    )
 
-        self.fc1 = nn.Linear(self._feature_dim, 384)
-        self.fc2 = nn.Linear(384, 192)
-        self.fc3 = nn.Linear(192, num_classes)
+    return model
 
-    def _get_feature_dim(self, input_size, in_channels):
-        h, w = input_size
-        with torch.no_grad():
-            x = torch.zeros(1, in_channels, h, w)
-            x = F.relu(self.conv1(x))
-            x = self.pool1(x)
-            x = F.relu(self.conv2(x))
-            x = self.pool2(x)
-            x = F.relu(self.conv3(x))
-            x = self.pool3(x)
-            feat_dim = x.view(1, -1).shape[1]
-        return feat_dim
 
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = self.pool1(x)
-        x = F.relu(self.conv2(x))
-        x = self.pool2(x)
-        x = F.relu(self.conv3(x))
-        x = self.pool3(x)
-        x = x.view(x.size(0), -1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+def model_to_parameters(model):
+    """Retrieve model weigths and convert to ndarrays."""
+    return ndarrays_to_parameters(model.get_weights())

@@ -1,18 +1,9 @@
-# --- Core ML dependencies ---
-torch>=2.0.0
-torchvision>=0.15.0
 
-# --- Numerical / utilities ---
+flwr==1.5.0
 numpy>=1.23
-tqdm>=4.65.0
-
-# --- Visualization and analysis ---
-matplotlib>=3.7
-pandas>=2.0
-
-# --- Jupyter notebook (optional but recommended for analysis) ---
-jupyter
-notebook
-
-# --- Misc ---
-requests>=2.31
+matplotlib>=3.5
+hydra-core>=1.1
+omegaconf>=2.1
+tensorflow>=2.10
+scikit-learn>=1.0
+cloudpickle
