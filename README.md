@@ -50,5 +50,10 @@ git clone https://github.com/<your-org>/federated-repro-extension.git
 cd federated-repro-extension
 ```
 
-
+### 2. Install the requirements 
+```bash
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
