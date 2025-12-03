@@ -1,9 +1,0 @@
-
-flwr==1.5.0
-numpy>=1.23
-matplotlib>=3.5
-hydra-core>=1.1
-omegaconf>=2.1
-tensorflow>=2.10
-scikit-learn>=1.0
-cloudpickle
