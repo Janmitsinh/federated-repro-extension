@@ -69,3 +69,34 @@ pip install -e . ensures the project is importable as a module.
 $env:PYTHONPATH = (Resolve-Path ..).Path
 python ..\main.py dataset=imagenette model=mobilenetv2 num_clients=4 num_rounds=2 client.local_epochs=1
 ```
+
+## 8. How to run imagenette dataset (Powershell)
+```
+python main.py dataset=imagenette model=mobilenetv2 num_clients=4 num_rounds=2 client.local_epochs=1
+```
+
+if above command fail than do this 
+# 1) go to the folder your run is using (same folder you ran main.py from)
+```
+Set-Location 'C:\Users\Janmitsinh\documents\github\federated-repro-extension\fedavgm\fedavgm'
+```
+
+# 2) create data directory if missing
+```
+if (-not (Test-Path .\data)) { New-Item -ItemType Directory -Path .\data | Out-Null }
+```
+
+# 3) download imagenette2-160.tgz (fastai S3 mirror)
+```
+Invoke-WebRequest -Uri "https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-160.tgz" -OutFile ".\data\imagenette2-160.tgz"
+```
+# 4) extract the .tgz into the data folder (Windows 10/11 usually has tar)
+```
+tar -xzf .\data\imagenette2-160.tgz -C .\data
+```
+
+# 5) confirm train/val folders exist
+```
+Test-Path .\data\imagenette2-160\train
+Test-Path .\data\imagenette2-160\val
+```
