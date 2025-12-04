@@ -62,3 +62,10 @@ If TensorFlow installation fails, use the fallback options above.
 
 pip install -e . ensures the project is importable as a module.
 
+## 7. ModuleNotFoundError: No module named 'fedavgm'
+
+# add parent folder to PYTHONPATH for this command only and run main.py
+```
+$env:PYTHONPATH = (Resolve-Path ..).Path
+python ..\main.py dataset=imagenette model=mobilenetv2 num_clients=4 num_rounds=2 client.local_epochs=1
+```
