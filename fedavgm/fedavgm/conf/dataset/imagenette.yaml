@@ -1,0 +1,4 @@
+_target_: fedavgm.dataset.imagenette
+data_dir: ${hydra:runtime.cwd}/data/imagenette2-160
+num_classes: 10
+input_shape: [160, 160, 3]

@@ -5,7 +5,29 @@ from keras.optimizers import SGD
 from keras.regularizers import l2
 from tensorflow import keras
 from tensorflow.nn import local_response_normalization  # pylint: disable=import-error
+from tensorflow.keras import layers, models, optimizers
+from tensorflow.keras.applications import MobileNetV2
 
+
+def mobilenetv2(input_shape, num_classes, learning_rate):
+    """MobileNetV2 transfer learning head suitable for Imagenette.
+
+    Returns a compiled Keras model. Uses categorical_crossentropy to be compatible
+    with existing client code that converts labels via to_categorical.
+    """
+    input_shape = tuple(input_shape)
+
+    base_model = MobileNetV2(weights="imagenet", include_top=False, input_shape=input_shape)
+    base_model.trainable = False  # freeze by default for faster experiments
+
+    x = layers.GlobalAveragePooling2D()(base_model.output)
+    x = layers.Dropout(0.2)(x)
+    outputs = layers.Dense(num_classes, activation="softmax")(x)
+
+    model = models.Model(inputs=base_model.input, outputs=outputs)
+    optimizer = optimizers.SGD(learning_rate=learning_rate, momentum=0.9)
+    model.compile(loss="categorical_crossentropy", optimizer=optimizer, metrics=["accuracy"])
+    return model
 
 def cnn(input_shape, num_classes, learning_rate):
     """CNN Model from (McMahan et. al., 2017).

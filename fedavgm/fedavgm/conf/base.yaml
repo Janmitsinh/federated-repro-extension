@@ -21,4 +21,5 @@ client:
 defaults:
   - strategy: custom-fedavgm
   - model: cnn
-  - dataset: cifar10
+  # - dataset: cifar10
+  - dataset: imagenette

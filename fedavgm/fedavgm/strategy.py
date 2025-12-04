@@ -3,7 +3,7 @@
 Needed only when the strategy is not yet implemented in Flower or because you want to
 extend or modify the functionality of an existing strategy.
 """
-
+import numpy as np
 from logging import WARNING
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -22,7 +22,129 @@ from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy import FedAvg
 from flwr.server.strategy.aggregate import aggregate
 
+class CustomFedAdam(FedAvg):
+    """Server-side adaptive update using Adam moments (FedAdam style)."""
 
+    def __init__(
+        self,
+        *,
+        fraction_fit: float = 1.0,
+        fraction_evaluate: float = 1.0,
+        min_fit_clients: int = 2,
+        min_evaluate_clients: int = 2,
+        min_available_clients: int = 2,
+        evaluate_fn: Optional[
+            Callable[
+                [int, NDArrays, Dict[str, Scalar]],
+                Optional[Tuple[float, Dict[str, Scalar]]],
+            ]
+        ] = None,
+        on_fit_config_fn: Optional[Callable[[int], Dict[str, Scalar]]] = None,
+        on_evaluate_config_fn: Optional[Callable[[int], Dict[str, Scalar]]] = None,
+        accept_failures: bool = True,
+        initial_parameters: Parameters = None,
+        fit_metrics_aggregation_fn: Optional[MetricsAggregationFn] = None,
+        evaluate_metrics_aggregation_fn: Optional[MetricsAggregationFn] = None,
+        server_lr: float = 1.0,
+        server_beta1: float = 0.9,
+        server_beta2: float = 0.999,
+        server_eps: float = 1e-8,
+    ) -> None:
+        super().__init__(
+            fraction_fit=fraction_fit,
+            fraction_evaluate=fraction_evaluate,
+            min_fit_clients=min_fit_clients,
+            min_evaluate_clients=min_evaluate_clients,
+            min_available_clients=min_available_clients,
+            evaluate_fn=evaluate_fn,
+            on_fit_config_fn=on_fit_config_fn,
+            on_evaluate_config_fn=on_evaluate_config_fn,
+            accept_failures=accept_failures,
+            initial_parameters=initial_parameters,
+            fit_metrics_aggregation_fn=fit_metrics_aggregation_fn,
+            evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn,
+        )
+        self.server_lr = server_lr
+        self.server_beta1 = server_beta1
+        self.server_beta2 = server_beta2
+        self.server_eps = server_eps
+
+        self.m: Optional[NDArrays] = None
+        self.v: Optional[NDArrays] = None
+        self.t = 0
+
+    def __repr__(self) -> str:
+        return f"CustomFedAdam(accept_failures={self.accept_failures})"
+
+    def initialize_parameters(self, client_manager: ClientManager) -> Optional[Parameters]:
+        return self.initial_parameters
+
+    def aggregate_fit(
+        self,
+        server_round: int,
+        results: List[Tuple[ClientProxy, FitRes]],
+        failures: List[Union[Tuple[ClientProxy, FitRes], BaseException]],
+    ) -> Tuple[Optional[Parameters], Dict[str, Scalar]]:
+        if not results:
+            return None, {}
+        if not self.accept_failures and failures:
+            return None, {}
+
+        weights_results = [
+            (parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples)
+            for _, fit_res in results
+        ]
+
+        fedavg_result = aggregate(weights_results)
+
+        assert self.initial_parameters is not None, "Initial parameters must be set for CustomFedAdam strategy"
+
+        # pseudo_gradient = w_old - w_new  (updates are opposite of gradients)
+        pseudo_gradient = [
+            x - y
+            for x, y in zip(parameters_to_ndarrays(self.initial_parameters), fedavg_result)
+        ]
+
+        # Adam-style moment estimates
+        self.t += 1
+        if self.m is None:
+            self.m = [np.zeros_like(g) for g in pseudo_gradient]
+            self.v = [np.zeros_like(g) for g in pseudo_gradient]
+
+        self.m = [
+            self.server_beta1 * m + (1.0 - self.server_beta1) * g
+            for m, g in zip(self.m, pseudo_gradient)
+        ]
+        self.v = [
+            self.server_beta2 * v + (1.0 - self.server_beta2) * (g ** 2)
+            for v, g in zip(self.v, pseudo_gradient)
+        ]
+
+        # Bias correction
+        m_hat = [m / (1.0 - (self.server_beta1 ** self.t)) for m in self.m]
+        v_hat = [v / (1.0 - (self.server_beta2 ** self.t)) for v in self.v]
+
+        update = [mh / (np.sqrt(vh) + self.server_eps) for mh, vh in zip(m_hat, v_hat)]
+
+        fed_adam_result = [
+            w - self.server_lr * u
+            for w, u in zip(parameters_to_ndarrays(self.initial_parameters), update)
+        ]
+
+        # set new initial_parameters (server model)
+        self.initial_parameters = ndarrays_to_parameters(fed_adam_result)
+        parameters_aggregated = ndarrays_to_parameters(fed_adam_result)
+
+        # aggregate metrics if provided
+        metrics_aggregated = {}
+        if self.fit_metrics_aggregation_fn:
+            fit_metrics = [(res.num_examples, res.metrics) for _, res in results]
+            metrics_aggregated = self.fit_metrics_aggregation_fn(fit_metrics)
+        elif server_round == 1:
+            log(WARNING, "No fit_metrics_aggregation_fn provided")
+
+        return parameters_aggregated, metrics_aggregated
+    
 class CustomFedAvgM(FedAvg):
     """Re-implmentation of FedAvgM.
 

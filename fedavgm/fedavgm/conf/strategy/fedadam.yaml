@@ -1,0 +1,15 @@
+# conf/strategy/fedadam.yaml
+_target_: fedavgm.strategy.CustomFedAdam
+min_available_clients: ${num_clients}
+fraction_fit: ${server.reporting_fraction}
+fraction_evaluate: ${fraction_evaluate}
+server_lr: ${server.learning_rate}
+server_beta1: 0.9
+server_beta2: 0.999
+server_eps: 1e-8
+on_fit_config_fn:
+  _target_: fedavgm.server.get_on_fit_config
+  config: ${client}
+initial_parameters:
+  _target_: fedavgm.models.model_to_parameters
+  model: ${model}
