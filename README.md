@@ -1,54 +1,64 @@
-# Federated Learning Reproducibility & Extension Project  
-**COMP 691 – Reproducing “Measuring the Effects of Non-Identical Data Distribution for Federated Visual Classification” (Hsu et al., 2019)**
+# FedAvgM – Setup & Execution Guide
 
-This repository contains a full reproducibility and extended experimentation pipeline for the 2019 paper by Hsu, Qi, and Brown, which investigates the effects of non-IID client data in Federated Learning (FL).  
-Our project faithfully reproduces the FedAvg and FedAvgM baselines on CIFAR-10 and extends the study to a more realistic dataset (Imagenette or MedMNIST) while introducing adaptive FL optimizers (FedAdam, FedYogi).
+This README provides instructions for setting up the environment, installing dependencies, and running the `fedavgm` project locally.
 
 ---
 
-## Overview
+## 1. Create & Activate Virtual Environment
 
-Federated Learning (FL) is highly sensitive to non-identical (non-IID) client distributions.  
-The original paper proposes:
-- A Dirichlet-based method for synthesizing client heterogeneity.
-- Baseline FedAvg performance across α ∈ {0.05, 0.1, 0.5, 1, 10, 100}.
-- FedAvgM (server momentum) as a stability improvement.
-
-This project:
-1. **Reproduces** the paper’s CIFAR-10 experiments.  
-2. **Analyzes** discrepancies, hyperparameter sensitivity, and convergence behavior.  
-3. **Extends** the work to:  
-   - A more realistic dataset (Imagenette or a medical dataset such as MedMNIST).  
-   - Alternate optimizers: FedAdam & FedYogi.  
-   - Additional non-IID schemes and scaling to more clients (50–500).  
-
----
-
-## Project Goals
-
-### Reproduction
-- Implement FedAvg and FedAvgM in PyTorch.
-- Generate non-IID Dirichlet client partitions.
-- Reproduce:
-  - Accuracy trends vs α.
-  - Sensitivity to η, E, C.
-  - Stability effects of server momentum β.
-
-### Extension
-- Add Imagenette or MedMNIST as a more realistic dataset.
-- Implement FedAdam and FedYogi server optimizers.
-- Evaluate scaling to larger numbers of clients.
-- Explore additional non-IID modes: label skew, quantity skew.
-
----
-
-## Setup
-
-### 1. Clone the repository
-```bash
-git clone https://github.com/<your-org>/federated-repro-extension.git
-cd federated-repro-extension
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 ```
 
+## 2. Upgrade pip and Install Dependencies
 
+```
+python -m pip install --upgrade pip
+pip install "flwr[simulation]==1.5.0" hydra-core==1.3.2 matplotlib cython
+```
+
+Alternative
+```
+python -m pip install --upgrade "flwr[simulation]"
+```
+
+## 3. Install TensorFlow (CPU)
+```
+pip install tensorflow==2.12.1
+```
+
+If this fails
+```
+pip install tensorflow-cpu==2.12.0
+```
+
+Or:
+```
+python -m pip install --upgrade pip
+python -m pip install tensorflow
+```
+
+## 4. Install Hydra
+```
+pip install hydra-core==1.3.2
+```
+
+## 5. Make the Project Importable
+```
+pip install -e .
+```
+
+## 6. Run the Project
+```
+python -m fedavgm.main
+```
+
+Notes
+
+Always activate the virtual environment before running commands.
+
+If TensorFlow installation fails, use the fallback options above.
+
+pip install -e . ensures the project is importable as a module.
 
