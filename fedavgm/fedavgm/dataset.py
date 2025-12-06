@@ -1,76 +1,77 @@
 """Dataset utilities for federated learning."""
 
 import os
+from pathlib import Path
 import tensorflow as tf
 import numpy as np
 from tensorflow import keras
 
 from fedavgm.common import create_lda_partitions
 
-def imagenette(num_classes, input_shape, data_dir):
-    """Load Imagenette (directory layout) and return numpy arrays in the same
-    format as cifar10/fmnist loaders used by main.py.
+def imagenette(num_classes, input_shape, data_dir=None, max_samples: int | None = None):
+    """Prepare Imagenette dataset (loads images using Keras utilities).
 
-    Expects `data_dir` with subfolders 'train' and 'val' containing class subfolders.
+    If max_samples is provided, dataset is truncated to that many examples
+    (useful for low-memory development runs).
     """
     print(f">>> [Dataset] Loading Imagenette from {data_dir} with input shape {input_shape}")
 
-    img_height, img_width = int(input_shape[0]), int(input_shape[1])
-    batch_size = 32
+    # Use image_dataset_from_directory to load and resize images
+    import tensorflow as tf
+    from tensorflow.keras.preprocessing import image_dataset_from_directory
 
-    train_dir = os.path.join(data_dir, "train")
-    val_dir = os.path.join(data_dir, "val")
+    # Default data_dir if None: use hydra expanded runtime cwd at call site
+    if data_dir is None:
+        raise ValueError("data_dir must be provided for imagenette loader")
 
-    if not os.path.isdir(train_dir) or not os.path.isdir(val_dir):
-        raise FileNotFoundError(
-            f"Imagenette train/val directories not found at {train_dir} or {val_dir}."
-        )
-
-    train_ds = tf.keras.preprocessing.image_dataset_from_directory(
-        train_dir,
+    ds_train = image_dataset_from_directory(
+        str(Path(data_dir) / "train"),
         labels="inferred",
         label_mode="int",
-        image_size=(img_height, img_width),
-        batch_size=batch_size,
-        shuffle=True,
+        image_size=(input_shape[0], input_shape[1]),
+        batch_size=128,
+        shuffle=False,
     )
-
-    val_ds = tf.keras.preprocessing.image_dataset_from_directory(
-        val_dir,
+    ds_val = image_dataset_from_directory(
+        str(Path(data_dir) / "val"),
         labels="inferred",
         label_mode="int",
-        image_size=(img_height, img_width),
-        batch_size=batch_size,
+        image_size=(input_shape[0], input_shape[1]),
+        batch_size=128,
         shuffle=False,
     )
 
-    normalization_layer = tf.keras.layers.Rescaling(1.0 / 255.0)
-    train_ds = train_ds.map(lambda x, y: (normalization_layer(x), y)).prefetch(tf.data.AUTOTUNE)
-    val_ds = val_ds.map(lambda x, y: (normalization_layer(x), y)).prefetch(tf.data.AUTOTUNE)
+    # Convert to numpy arrays if max_samples is specified (truncated)
+    def dataset_to_numpy(ds, max_samples=None):
+        xs = []
+        ys = []
+        seen = 0
+        for batch_x, batch_y in ds:
+            batch_x = batch_x.numpy().astype("float32") / 255.0
+            batch_y = batch_y.numpy().astype("int64")
+            xs.append(batch_x)
+            ys.append(batch_y)
+            seen += batch_x.shape[0]
+            if max_samples is not None and seen >= max_samples:
+                break
+        if len(xs) == 0:
+            return np.empty((0, *input_shape), dtype=np.float32), np.empty((0,), dtype=np.int64)
+        x_arr = np.concatenate(xs, axis=0)
+        y_arr = np.concatenate(ys, axis=0).reshape((-1,))
+        if max_samples is not None and x_arr.shape[0] > max_samples:
+            x_arr = x_arr[:max_samples]
+            y_arr = y_arr[:max_samples]
+        return x_arr, y_arr
 
-    # Convert to numpy arrays (Imagenette small subset — should fit memory on standard dev machine)
-    x_train_batches = []
-    y_train_batches = []
-    for x_batch, y_batch in train_ds:
-        x_train_batches.append(x_batch.numpy())
-        y_train_batches.append(y_batch.numpy())
-    x_train = np.concatenate(x_train_batches, axis=0)
-    y_train = np.concatenate(y_train_batches, axis=0)
+    x_train, y_train = dataset_to_numpy(ds_train, max_samples=max_samples)
+    x_test, y_test = dataset_to_numpy(ds_val, max_samples=None)
 
-    x_test_batches = []
-    y_test_batches = []
-    for x_batch, y_batch in val_ds:
-        x_test_batches.append(x_batch.numpy())
-        y_test_batches.append(y_batch.numpy())
-    x_test = np.concatenate(x_test_batches, axis=0)
-    y_test = np.concatenate(y_test_batches, axis=0)
+    input_shape = tuple(input_shape)
+    num_classes = num_classes
 
-    # Ensure dtype
-    x_train = x_train.astype("float32")
-    x_test = x_test.astype("float32")
+    print(f">>> Imagenette loaded: train={len(x_train)} val={len(x_test)}")
+    return x_train, y_train, x_test, y_test, input_shape, num_classes
 
-    # Return same shape format as other loaders
-    return x_train, y_train, x_test, y_test, (img_height, img_width, 3), num_classes
 
 def cifar10(num_classes, input_shape):
     """Prepare the CIFAR-10.
