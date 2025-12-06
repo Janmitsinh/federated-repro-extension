@@ -68,7 +68,12 @@ def main(cfg: DictConfig) -> None:
     save_path = HydraConfig.get().runtime.output_dir
 
     strategy_name = strategy.__class__.__name__
-    dataset_type = "cifar10" if cfg.dataset.input_shape == [32, 32, 3] else "fmnist"
+    if cfg.dataset.input_shape == [32, 32, 3]:
+        dataset_type = "cifar10"
+    elif cfg.dataset.input_shape == [28, 28, 1]:
+        dataset_type = "fmnist"
+    else:
+        dataset_type = "imagenette"
 
     def format_variable(x):
         return f"{x!r}" if isinstance(x, bytes) else x

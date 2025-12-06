@@ -177,6 +177,7 @@ class CustomFedAvgM(FedAvg):
         evaluate_metrics_aggregation_fn: Optional[MetricsAggregationFn] = None,
         server_learning_rate: float = 1.0,
         server_momentum: float = 0.9,
+        server_nesterov: bool = False,
     ) -> None:
         """Federated Averaging with Momentum strategy.
 
@@ -210,6 +211,8 @@ class CustomFedAvgM(FedAvg):
             Defaults to 1.0.
         server_momentum: float
             Server-side momentum factor used for FedAvgM. Defaults to 0.9.
+        server_nesterov: bool
+            Whether to use Nesterov momentum. Defaults to False.
         """
         super().__init__(
             fraction_fit=fraction_fit,
@@ -227,6 +230,7 @@ class CustomFedAvgM(FedAvg):
         )
         self.server_learning_rate = server_learning_rate
         self.server_momentum = server_momentum
+        self.server_nesterov = server_nesterov
         self.momentum_vector: Optional[NDArrays] = None
 
     def __repr__(self) -> str:
@@ -281,9 +285,10 @@ class CustomFedAvgM(FedAvg):
         if server_round > 1:
             assert self.momentum_vector, "Momentum should have been created on round 1."
 
+            # v_t = beta * v_{t-1} + g_t
             self.momentum_vector = [
-                self.server_momentum * v + w
-                for w, v in zip(pseudo_gradient, self.momentum_vector)
+                self.server_momentum * v + g
+                for g, v in zip(pseudo_gradient, self.momentum_vector)
             ]
         else:  # Round 1
             # Initialize server-side model
@@ -291,19 +296,27 @@ class CustomFedAvgM(FedAvg):
                 self.initial_parameters is not None
             ), "When using server-side optimization, model needs to be initialized."
             # Initialize momentum vector
+            # v_1 = g_1
             self.momentum_vector = pseudo_gradient
 
-        # Applying Nesterov
-        pseudo_gradient = [
-            g + self.server_momentum * v
-            for g, v in zip(pseudo_gradient, self.momentum_vector)
-        ]
+        # Applying Nesterov if configured
+        if self.server_nesterov:
+            # For Nesterov, the update is typically: w_{t+1} = w_t - lr * (g_t + beta * v_{t+1})
+            # (depending on formulation, but often approximated as such in SGD+NAG contexts)
+            # Here we apply the update to the pseudo_gradient used for the step.
+            update_vector = [
+                g + self.server_momentum * v
+                for g, v in zip(pseudo_gradient, self.momentum_vector)
+            ]
+        else:
+            # Standard momentum: w_{t+1} = w_t - lr * v_{t+1}
+            update_vector = self.momentum_vector
 
         # Federated Averaging with Server Momentum
         fedavgm_result = [
             w - self.server_learning_rate * v
             for w, v in zip(
-                parameters_to_ndarrays(self.initial_parameters), pseudo_gradient
+                parameters_to_ndarrays(self.initial_parameters), update_vector
             )
         ]
 
