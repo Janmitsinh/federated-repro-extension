@@ -86,4 +86,5 @@ build/
 
 fedavgm/fedavgm/data/
 fedavgm/fedavgm/outputs/
+fedavgm/outputs/
 .idea
