@@ -78,7 +78,7 @@ python main.py dataset=imagenette model=mobilenetv2 num_clients=4 num_rounds=2 c
 if above command fail than do this 
 # 1) go to the folder your run is using (same folder you ran main.py from)
 ```
-Set-Location 'C:\Users\Janmitsinh\documents\github\federated-repro-extension\fedavgm\fedavgm'
+Set-Location 'YOUR Porject Path'
 ```
 
 # 2) create data directory if missing
