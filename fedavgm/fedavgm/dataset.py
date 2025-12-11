@@ -105,53 +105,11 @@ def fmnist(num_classes, input_shape):
     return x_train, y_train, x_test, y_test, input_shape, num_classes
 
 
-def create_shards_partitions(x, y, num_clients, shards_per_client=2):
-    
-
-    idx = np.argsort(y, axis=0)
-    x_sorted = x[idx]
-    y_sorted = y[idx]
-
-
-    total_samples = x.shape[0]
-    total_shards = num_clients * shards_per_client
-    shard_size = total_samples // total_shards
-
-    if shard_size * total_shards != total_samples:
-        print(f"Warning: Dropping {total_samples % total_shards} samples to ensure equal shards.")
-        cutoff = shard_size * total_shards
-        x_sorted = x_sorted[:cutoff]
-        y_sorted = y_sorted[:cutoff]
-
-
-    shards_x = np.split(x_sorted, total_shards)
-    shards_y = np.split(y_sorted, total_shards)
-    
-
-    shard_idxs = np.random.permutation(total_shards)
-    
-    partitions = []
-    for i in range(num_clients):
-        my_shards_indices = shard_idxs[i * shards_per_client : (i + 1) * shards_per_client]
-        
-        x_local = np.concatenate([shards_x[j] for j in my_shards_indices], axis=0)
-        y_local = np.concatenate([shards_y[j] for j in my_shards_indices], axis=0)
-        
-        partitions.append((x_local, y_local))
-        
-    return partitions
-
-
 def partition(x_train, y_train, num_clients, concentration):
     """Create non-iid partitions.
 
     The partitions uses a LDA distribution based on concentration.
     """
-    # --- LOGIC FOR SHARDS ---
-    if concentration < 0:
-        print(f">>> [Dataset] Using SHARD-BASED partition (FedAvg original).")
-        return create_shards_partitions(x_train, y_train, num_clients, shards_per_client=2)
-    # ----------------------------
     print(
         f">>> [Dataset] {num_clients} clients, non-iid concentration {concentration}..."
     )
