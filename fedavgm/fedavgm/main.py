@@ -6,6 +6,8 @@ model is going to be evaluated, etc. At the end, this script saves the results.
 
 import pickle
 from pathlib import Path
+import sys
+import traceback
 
 import flwr as fl
 import hydra
@@ -13,6 +15,17 @@ import numpy as np
 from hydra.core.hydra_config import HydraConfig
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
+
+# Monkey patch to bypass Windows Job Object error (OSError: [Errno 0] AssignProcessToJobObject() failed)
+try:
+    import ray._private.utils
+    import ray._private.services
+    def noop(*args, **kwargs):
+        pass
+    ray._private.utils.set_kill_child_on_death_win32 = noop
+    ray._private.services.set_kill_child_on_death_win32 = noop
+except ImportError:
+    pass # Ray might not be installed or used yet
 
 from fedavgm.client import generate_client_fn
 from fedavgm.dataset import partition
@@ -54,15 +67,58 @@ def main(cfg: DictConfig) -> None:
     strategy = instantiate(cfg.strategy, evaluate_fn=evaluate_fn)
 
     # 5. Start Simulation
-    history = fl.simulation.start_simulation(
-        client_fn=client_fn,
-        num_clients=cfg.num_clients,
-        config=fl.server.ServerConfig(num_rounds=cfg.num_rounds),
-        strategy=strategy,
-        client_resources={"num_cpus": cfg.num_cpus, "num_gpus": cfg.num_gpus},
-    )
+    # 5. Start Simulation
+    # Force local_mode=True for Windows to avoid 'CreateFileMapping() failed' (paging file too small / resource exhaustion)
+    # The previous attempts with local_mode=False caused OOM/Handle leaks on this specific environment.
+    ray_local_mode = True
+    
+    ray_init_args = {
+        "local_mode": ray_local_mode,
+        "include_dashboard": False,
+        # "num_cpus": cfg.num_cpus, # Let Ray detect or use default in local mode
+        # "num_gpus": cfg.num_gpus 
+    }
 
-    _, final_acc = history.metrics_centralized["accuracy"][-1]
+    try:
+        print(f"Starting simulation with ray_init_args: {ray_init_args}")
+        history = fl.simulation.start_simulation(
+            client_fn=client_fn,
+            num_clients=cfg.num_clients,
+            config=fl.server.ServerConfig(num_rounds=cfg.num_rounds),
+            strategy=strategy,
+            client_resources={"num_cpus": cfg.num_cpus, "num_gpus": cfg.num_gpus},
+            ray_init_args=ray_init_args,
+        )
+    except Exception as exc:
+        print("Error starting simulation (Ray/TensorFlow). Attempting fallback.")
+        print(f"Original error: {exc}")
+        # traceback.print_exc(file=sys.stdout)
+        
+        # Fallback: Try the opposite mode
+        fallback_mode = not ray_local_mode
+        print(f"Retrying with local_mode={fallback_mode} ...")
+        
+        ray_init_args["local_mode"] = fallback_mode
+        
+        try:
+            history = fl.simulation.start_simulation(
+                client_fn=client_fn,
+                num_clients=cfg.num_clients,
+                config=fl.server.ServerConfig(num_rounds=cfg.num_rounds),
+                strategy=strategy,
+                client_resources={"num_cpus": cfg.num_cpus, "num_gpus": cfg.num_gpus},
+                ray_init_args=ray_init_args,
+            )
+        except Exception as exc2:
+            print(f"Fallback failed: {exc2}")
+            print("Aborting run.")
+            raise
+
+    # If we get here, history should be available
+    try:
+        _, final_acc = history.metrics_centralized["accuracy"][-1]
+    except Exception:
+        final_acc = None
 
     # 6. Save your results
     save_path = HydraConfig.get().runtime.output_dir
@@ -88,7 +144,7 @@ def main(cfg: DictConfig) -> None:
         f"_alpha={format_variable(cfg.noniid.concentration)}"
         f"_server-momentum={format_variable(cfg.server.momentum)}"
         f"_client-lr={format_variable(cfg.client.lr)}"
-        f"_acc={format_variable(final_acc):.4f}"
+        f"_acc={format_variable(final_acc) if final_acc is not None else 'None'}"
     )
 
     filename = "results" + file_suffix + ".pkl"

@@ -2,6 +2,8 @@
 
 This README provides instructions for setting up the environment, installing dependencies, and running the `fedavgm` project locally.
 
+Flower (flwr) abstracts away the backend, and TensorFlow was chosen for better stability with the specific model architectures used in the reproduction.
+
 ---
 
 ## 1. Create & Activate Virtual Environment

@@ -25,21 +25,17 @@ def get_on_fit_config(config: DictConfig):
 def get_evaluate_fn(model, x_test, y_test, num_rounds, num_classes):
     """Generate the function for server global model evaluation.
 
-    The method evaluate_fn runs after global model aggregation.
+    The evaluate_fn will run after every global aggregation (every round).
     """
+    def evaluate_fn(server_round: int, parameters, config):  # pylint: disable=unused-argument
+        # instantiate the model and set weights
+        model.set_weights(parameters)
 
-    def evaluate_fn(
-        server_round: int, parameters, config
-    ):  # pylint: disable=unused-argument
-        if server_round == num_rounds:  # evaluates global model just on the last round
-            # instantiate the model
-            model.set_weights(parameters)
+        y_test_cat = to_categorical(y_test, num_classes=num_classes)
+        loss, accuracy = model.evaluate(x_test, y_test_cat, verbose=False)
 
-            y_test_cat = to_categorical(y_test, num_classes=num_classes)
-            loss, accuracy = model.evaluate(x_test, y_test_cat, verbose=False)
-
-            return loss, {"accuracy": accuracy}
-
-        return None
+        # Return loss and metrics for this round
+        return loss, {"accuracy": accuracy}
 
     return evaluate_fn
+

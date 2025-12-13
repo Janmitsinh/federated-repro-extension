@@ -1,0 +1,31 @@
+
+# .gitignore for Federated Learning Project
+
+# Python & System
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.env
+.DS_Store
+
+# Data (Too large for git)
+data/
+data/cifar-10-batches-py/
+data/imagenette2-320/
+
+# Simulation Outputs (Too many files)
+outputs/
+smoke_run_log.txt
+
+# Do NOT ignore the summary plots (we want these!)
+# !cifar10_repro_outputs/*.png
+# !imagenette_outputs/*.png
+# !hyperparam_outputs/*.png
+
+# VS Code / IDEs
+.vscode/
+.idea/
+
+# Tools (optional, keeping clean)
+tools/
