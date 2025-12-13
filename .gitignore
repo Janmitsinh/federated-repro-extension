@@ -83,3 +83,8 @@ plots/
 dist/
 build/
 *.egg-info/
+
+fedavgm/fedavgm/data/
+fedavgm/fedavgm/outputs/
+fedavgm/outputs/
+.idea
